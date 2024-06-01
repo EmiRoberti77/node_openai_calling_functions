@@ -1,0 +1,113 @@
+const dotenv = require('dotenv');
+const axios = require('axios');
+const { DateTime } = require('luxon');
+
+dotenv.config();
+const apiKey = process.env.OPEN_AI_KEY;
+
+const timeEndPoint = (location) =>
+  'http://worldtimeapi.org/api/timezone/' + location;
+
+const { OpenAI } = require('openai');
+
+const openai = new OpenAI({
+  apiKey,
+});
+
+async function lookUpTime(location) {
+  try {
+    const response = await axios.get(timeEndPoint(location));
+    const { datetime } = response.data;
+    const dateTimeObj = DateTime.fromISO(datetime, { setZone: true });
+    // Format the time while keeping the original timezone
+    const timeString = dateTimeObj.toLocaleString(DateTime.TIME_WITH_SECONDS);
+    return {
+      time: timeString,
+    };
+  } catch (err) {
+    console.log(err.message);
+    return {
+      error: err.message,
+    };
+  }
+}
+
+async function main() {
+  const messages = [
+    { role: 'system', content: 'you are a helpful assistant' },
+    { role: 'user', content: 'what time is it central time?' },
+  ];
+
+  const tools = [
+    {
+      type: 'function',
+      function: {
+        name: 'lookUpTime',
+        description: 'Get the current time from specified location',
+        parameters: {
+          type: 'object',
+          properties: {
+            location: {
+              type: 'string',
+              description:
+                'the location, e.g rome should be written as europe/rome',
+            },
+          },
+          required: ['location'],
+        },
+      },
+    },
+  ];
+  const model = 'gpt-4o';
+  const tool_choice = 'auto';
+
+  const response = await openai.chat.completions.create({
+    model,
+    messages,
+    tools,
+    tool_choice,
+  });
+
+  //console.log('x.choices[0].message', response.choices[0].message);
+  const responseMessage = response.choices[0].message;
+
+  if (responseMessage.tool_calls) {
+    const toolCalls = response.choices[0].message.tool_calls;
+
+    const availableFunctions = {
+      lookUpTime: lookUpTime,
+    };
+
+    //extend conversation
+    messages.push(responseMessage);
+
+    for (const toolCall of toolCalls) {
+      const functionName = toolCall.function.name;
+      const functionToCall = availableFunctions[functionName];
+      const functionArgs = JSON.parse(toolCall.function.arguments);
+      const functionResponse = await functionToCall(functionArgs.location);
+
+      messages.push({
+        tool_call_id: toolCall.id,
+        role: 'tool',
+        name: functionName,
+        content: functionResponse.time,
+      }); //extend conversation
+
+      console.log(functionResponse);
+    }
+    console.log(messages);
+    const secondResponse = await openai.chat.completions.create({
+      model,
+      messages,
+    });
+
+    console.log(secondResponse.choices);
+  }
+}
+
+main()
+  .then(() => {
+    console.log('completed');
+  })
+  .catch((err) => console.log(err));
