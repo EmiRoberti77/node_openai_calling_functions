@@ -14,6 +14,31 @@ const openai = new OpenAI({
   apiKey,
 });
 
+function getCurrentWeather(location, unit = 'fahrenheit') {
+  console.log('getCurrentWeather =>', location, unit);
+  if (location.toLowerCase().includes('tokyo')) {
+    return JSON.stringify({
+      location: 'Tokyo',
+      temperature: '10',
+      unit: 'celsius',
+    });
+  } else if (location.toLowerCase().includes('san francisco')) {
+    return JSON.stringify({
+      location: 'San Francisco',
+      temperature: '72',
+      unit: 'fahrenheit',
+    });
+  } else if (location.toLowerCase().includes('paris')) {
+    return JSON.stringify({
+      location: 'Paris',
+      temperature: '22',
+      unit: 'fahrenheit',
+    });
+  } else {
+    return JSON.stringify({ location, temperature: 'unknown' });
+  }
+}
+
 async function lookUpTime(location) {
   try {
     const response = await axios.get(timeEndPoint(location));
@@ -21,21 +46,22 @@ async function lookUpTime(location) {
     const dateTimeObj = DateTime.fromISO(datetime, { setZone: true });
     // Format the time while keeping the original timezone
     const timeString = dateTimeObj.toLocaleString(DateTime.TIME_WITH_SECONDS);
-    return {
+    return JSON.stringify({
       time: timeString,
-    };
+    });
   } catch (err) {
     console.log(err.message);
-    return {
+    return JSON.stringify({
       error: err.message,
-    };
+    });
   }
 }
 
 async function main() {
   const messages = [
     { role: 'system', content: 'you are a helpful assistant' },
-    { role: 'user', content: 'what time is it central time?' },
+    { role: 'user', content: 'what time is it in paris?' },
+    { role: 'user', content: 'what is the weather in paris?' },
   ];
 
   const tools = [
@@ -57,6 +83,28 @@ async function main() {
         },
       },
     },
+    {
+      type: 'function',
+      function: {
+        name: 'getCurrentWeather',
+        description: 'Get the current weather in a given location',
+        parameters: {
+          type: 'object',
+          properties: {
+            location: {
+              type: 'string',
+              description: 'the location that we want the weather from',
+            },
+            unit: {
+              type: 'string',
+              description: 'the matrix to measure the temperature',
+              enum: ['celsius', 'fahrenheit'],
+            },
+          },
+          required: ['location'],
+        },
+      },
+    },
   ];
   const model = 'gpt-4o';
   const tool_choice = 'auto';
@@ -68,7 +116,6 @@ async function main() {
     tool_choice,
   });
 
-  //console.log('x.choices[0].message', response.choices[0].message);
   const responseMessage = response.choices[0].message;
 
   if (responseMessage.tool_calls) {
@@ -76,6 +123,7 @@ async function main() {
 
     const availableFunctions = {
       lookUpTime: lookUpTime,
+      getCurrentWeather: getCurrentWeather,
     };
 
     //extend conversation
@@ -91,7 +139,7 @@ async function main() {
         tool_call_id: toolCall.id,
         role: 'tool',
         name: functionName,
-        content: functionResponse.time,
+        content: functionResponse,
       }); //extend conversation
 
       console.log(functionResponse);
