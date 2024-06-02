@@ -1,1 +1,3 @@
 https://github.com/openai/openai-node/discussions/217
+
+https://vercel.com/guides/openai-function-calling
