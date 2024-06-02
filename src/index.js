@@ -62,6 +62,7 @@ async function main() {
     { role: 'system', content: 'you are a helpful assistant' },
     { role: 'user', content: 'what time is it in paris?' },
     { role: 'user', content: 'what is the weather in paris?' },
+    { role: 'user', content: 'how far in the earth from the moon?' },
   ];
 
   const tools = [
